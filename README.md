@@ -7,4 +7,5 @@ Please find the cleaned and balanced time series for the indices in the csv file
 ## CODE & OUTPUT
 
 **armaGARCH.rmd** contains parts of the code for the analysis, focused specifically on the GARCH estimation.
+
 **armaGARCH.html** contains the output of the code.
