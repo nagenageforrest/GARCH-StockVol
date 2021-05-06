@@ -2,7 +2,7 @@
 
 ### DATA
 
-Please find the cleaned and balanced time series for the indices in the csv file within the Data Folder. Variables labeled e, v, d are the log-transformed time series.
+Please find the cleaned and balanced time series for the indices in the csv file (intra_data.csv). Variables labeled e, v, d are the log-transformed time series.
 
 ### CODE & OUTPUT
 
