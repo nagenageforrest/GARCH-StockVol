@@ -1,0 +1,640 @@
+---
+title: "armaGARCH"
+author: "Nage Ngo"
+date: "11/24/2020"
+output:   
+  html_document:
+    toc: true
+    toc_depth: 3
+    theme: cosmo
+    highlight: tango
+    toc_float: true
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r setup2, include=FALSE}
+library(tidyverse)
+library(plotly)
+library(rugarch)
+library(dplyr)
+library(gridExtra)
+library(ggplot2)
+library(readr)
+library(lubridate)
+```
+
+# INTRADAY
+
+#### Timeline: 2019-08-29 09:35:00 - 2020-11-20 16:10:00
+
+```{r import intra, include=FALSE}
+intra <- read_csv("data/processed/intra_data.csv",
+                          col_types = cols(X1 = col_skip())) 
+```
+
+```{r plot intra, echo=F, message=F, warning=F, error=F}
+e1 <- ts(intra$e)
+d1 <- ts(intra$d) 
+v1 <- ts(intra$v)
+
+par(mfrow = c(2,3))
+
+plot(x= intra$Date, y= intra$SPX, type = "l")
+plot(x= intra$Date, y= intra$VIX, type = "l")
+plot(x= intra$Date, y= intra$DXY, type = "l")
+
+plot(e1)
+plot(d1)
+plot(v1)
+
+# fdfjkd  -- 
+# par(mfrow = c(2,3))
+# 
+# hist(e1, prob=TRUE)
+# xfit<-seq(min(e1),max(e1),length=40)
+# yfit<-dnorm(xfit,mean=mean(e1),sd=sd(e1))
+# lines(xfit, yfit, col="blue", lwd=2)
+# 
+# hist(v1, prob=TRUE)
+# xfit<-seq(min(v1),max(v1),length=40)
+# yfit<-dnorm(xfit,mean=mean(v1),sd=sd(v1))
+# lines(xfit, yfit, col="blue", lwd=2)
+# 
+# hist(d1, prob=TRUE)
+# xfit<-seq(min(d1),max(d1),length=50)
+# yfit<-dnorm(xfit,mean=mean(d1),sd=sd(d1))
+# lines(xfit, yfit, col="blue", lwd=2)
+# 
+# qqnorm(e1)
+# qqline(e1) 
+# 
+# qqnorm(v1)
+# qqline(v1) 
+# 
+# qqnorm(d1)
+# qqline(d1) 
+```
+
+```{r}
+# g <- ggplot(data=intra) + theme_classic() +
+#   geom_line(aes(x=Date,y=SPX)) +
+#   scale_y_continuous(limits=c(0, 50)) +
+#   labs(x="Date", y="S&P 500 Price")
+
+
+ay <- list(
+  tickfont = list(color = "red"),
+  overlaying = "y",
+  side = "right",
+  title = "S&P 500 Volatility"
+)
+
+fig <- plot_ly() 
+fig <- fig %>% add_lines(x = intra$Date, y = intra$SPX, name = "S&P 500 Price")
+fig <- fig %>% add_lines(x = intra$Date, y = intra$e, name = "S&P 500 Volatility", yaxis = "y2",opacity = 0.5)
+fig <- fig %>% add_lines(x = as_datetime("2020-03-03 10:00:00	"), y = intra$e, name = "Rate Cut 03/03", yaxis = "y2",opacity = 1.0)
+fig <- fig %>% add_lines(x = as_datetime("2020-03-16 09:45:00	"), y = intra$e, name = "QE 03/15", yaxis = "y2",opacity = 1.0)
+fig <- fig %>% add_lines(x = as_datetime("2020-03-23 09:30:00	"), y = intra$e, name = "QE 03/23", yaxis = "y2",opacity = 1.0)
+fig <- fig %>% add_lines(x = as_datetime("2020-04-06 09:30:00	"), y = intra$e, name = "LF 04/06", yaxis = "y2",opacity = 1.0)
+fig <- fig %>% add_lines(x = as_datetime("2020-04-28 09:30:00	"), y = intra$e, name = "LF 04/27", yaxis = "y2",opacity = 1.0)
+fig <- fig %>% add_lines(x = as_datetime("2020-07-28 09:30:00	"), y = intra$e, name = "LF 07/28", yaxis = "y2",opacity = 1.0)
+
+
+fig <- fig %>% layout(
+    title = "S&P 500 Index Level and Return Volatility", yaxis2 = ay, 
+    xaxis = list(title="Date"), yaxis1 = list(title = "S&P 500 Index")
+  )
+fig
+
+# htmlwidgets::saveWidget(fig, "fig.html", selfcontained = F, libdir = "lib")
+
+# g + geom_line(data = intra, aes(x=Date,y=e))  +
+#   scale_y_continuous(limits=c(-0.1, 0.1),
+#                      sec.axis = sec_axis(~ . *0.1, name = "name of the new axis"))
+```
+
+```{r}
+fed <- read_csv("fredgraph/Weekly_As_of_Wednesday.csv", col_types = cols(DATE = col_character()))
+all <- read_csv("fredgraph/Weekly_Ending_Wednesday.csv", col_types = cols(DATE = col_character())) %>%
+  full_join(fed, by = "DATE")%>% na.omit()
+
+by <- list(
+  tickfont = list(color = "red"),
+  overlaying = "y",
+  side = "right"
+)
+
+figQE <- plot_ly() 
+figQE <- figQE %>% add_lines(x = as.Date(all$DATE), y = all$WALCL, name = "Assets: Total Assets (Less Eliminations from Consolidation): Wednesday Level (in mm)")
+figQE <- figQE %>% add_lines(x = as.Date(all$DATE), y = all$SP500, name = "S&P 500: Week ending Wednesday",yaxis = "y2",opacity = 0.5)
+
+figQE <- figQE %>% layout(
+    title = "The US Fed's Total Assets (Less Eliminations from Consolidation)", yaxis2 = by, 
+    xaxis = list(title="Date")
+  )
+
+figQE
+```
+
+
+## GARCH
+
+#### EGARCH (1,1)
+
+```{r event intra}
+events_intra <- read_csv("data/event_lists/events_intra.csv", 
+    col_types = cols(Date = col_datetime(format = "%m/%d/%y %H:%M")))
+# events----
+hr1_315 <- ts(events_intra[,2])
+hr2_315 <- ts(events_intra[,3])
+hr3_315 <- ts(events_intra[,4])
+hr4_315 <- ts(events_intra[,5])
+hr5_315 <- ts(events_intra[,6])
+hr6_315 <- ts(events_intra[,7])
+
+hr1_33 <- ts(events_intra[,8])
+hr2_33 <- ts(events_intra[,9])
+hr3_33 <- ts(events_intra[,10])
+hr4_33 <- ts(events_intra[,11])
+hr5_33 <- ts(events_intra[,12])
+hr6_33 <- ts(events_intra[,13])
+
+hr1_323 <- ts(events_intra[,14])
+hr2_323 <- ts(events_intra[,15])
+hr3_323 <- ts(events_intra[,16])
+hr4_323 <- ts(events_intra[,17])
+hr5_323 <- ts(events_intra[,18])
+hr6_323 <- ts(events_intra[,19])
+
+hr1_46 <- ts(events_intra[,20])
+hr2_46 <- ts(events_intra[,21])
+hr3_46 <- ts(events_intra[,22])
+hr4_46 <- ts(events_intra[,23])
+hr5_46 <- ts(events_intra[,24])
+hr6_46 <- ts(events_intra[,25])
+
+hr1_427 <- ts(events_intra[,26])
+hr2_427 <- ts(events_intra[,27])
+hr3_427 <- ts(events_intra[,28])
+hr4_427 <- ts(events_intra[,29])
+hr5_427 <- ts(events_intra[,30])
+hr6_427 <- ts(events_intra[,31])
+
+hr1_625 <- ts(events_intra[,32])
+hr2_625 <- ts(events_intra[,33])
+hr3_625 <- ts(events_intra[,34])
+hr4_625 <- ts(events_intra[,35])
+hr5_625 <- ts(events_intra[,36])
+hr6_625 <- ts(events_intra[,37])
+
+hr1_728 <- ts(events_intra[,38])
+hr2_728 <- ts(events_intra[,39])
+hr3_728 <- ts(events_intra[,40])
+hr4_728 <- ts(events_intra[,41])
+hr5_728 <- ts(events_intra[,42])
+hr6_728 <- ts(events_intra[,43])
+
+# events + external----
+ext_reg_intra   <- cbind(v1, d1, hr1_315,hr2_315,hr3_315,hr4_315,hr5_315,hr6_315,
+                         hr1_33, hr2_33, hr3_33, hr4_33, hr5_33, hr6_33,
+                         hr1_323, hr2_323, hr3_323, hr4_323, hr5_323, hr6_323,
+                         hr1_46, hr2_46, hr3_46, hr4_46, hr5_46, hr6_46, 
+                         hr1_427, hr2_427, hr3_427, hr4_427, hr5_427, hr6_427,
+                         hr1_625, hr2_625, hr3_625, hr4_625, hr5_625, hr6_625,
+                         hr1_728, hr2_728, hr3_728, hr4_728, hr5_728, hr6_728) %>% na.omit()
+```
+
+```{r , echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+uspec.intra  = ugarchspec(mean.model = list(armaOrder = c(1,0),
+                                        external.regressors =
+                                          ext_reg_intra[,c(1,2)]),
+                      variance.model = list(model="eGARCH", 
+                                            garchOrder = c(1,1),
+                                            external.regressors =
+                                              ext_reg_intra[,c(3,4,5,6,7,8)]),
+                      distribution.model = "std")
+fit_intra       <- ugarchfit(data = e1, spec = uspec.intra) 
+fit_intra
+# vol_intra <- ts(fit_intra@fit$sigma^2)
+
+coef_intra <- data.frame(fit_intra@fit$robust.matcoef[,1])
+h1_coef <- coef_intra[c("vxreg1"),]
+h2_coef <- coef_intra[c("vxreg2"),]
+h3_coef <- coef_intra[c("vxreg3"),]
+h4_coef <- coef_intra[c("vxreg4"),]
+h5_coef <- coef_intra[c("vxreg5"),]
+h6_coef <- coef_intra[c("vxreg6"),]
+# h7_coef <- coef_intra[c("vxreg7"),]
+
+mu <- coef_intra[c("mu"),]
+ar1 <- coef_intra[c("ar1"),]
+mxv <- coef_intra[c("mxreg1"),]
+mxd <- coef_intra[c("mxreg2"),]
+omega <- coef_intra[c("omega"),]
+alpha1 <- coef_intra[c("alpha1"),]
+beta1 <- coef_intra[c("beta1"),]
+gamma1 <- coef_intra[c("gamma1"),]
+
+
+pv_315 <- data.frame(fit_intra@fit$robust.matcoef[,4]) %>%
+  rename(event_315 = fit_intra.fit.robust.matcoef...4.)
+Pv_315 <- cbind(pv = rownames(pv_315), pv_315)
+rownames(Pv_315) <- 1:nrow(Pv_315)
+
+coef_315 <- data.frame(mu,ar1,mxv,mxd,omega,alpha1, beta1,gamma1) %>%
+  pivot_longer(cols = c(1,2,3,4,5,6,7,8),
+               names_to = "coef", values_to="coef_315")
+
+hour_impact <- data.frame(h1_coef,h2_coef,h3_coef,h4_coef,h5_coef,h6_coef) %>%
+ mutate(h0 = 0) %>%
+  select(h0,h1=h1_coef, h2=h2_coef,h3=h3_coef,
+         h4=h4_coef,h5=h5_coef,h6=h6_coef)%>%
+  pivot_longer(cols=c(1,2,3,4,5,6,7),
+               names_to = "hour", values_to="percent_change") %>%
+  mutate(h = row_number()-1) # numerical hour
+
+# ts.plot(vol_intra, col = c("black", "green", "red")) 
+```
+
+# OTHER EVENTS
+
+```{r intra egarch 33, echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+# 3/3 rate cut ----
+uspec.intra33  = ugarchspec(mean.model = list(armaOrder = c(1,0),
+                                        external.regressors =
+                                          ext_reg_intra[,c(1,2)]),
+                      variance.model = list(model="eGARCH", 
+                                            garchOrder = c(1,1),
+                                            external.regressors =
+                                              ext_reg_intra[,c(9,10,11,12,13,14)]),
+                      distribution.model = "std")
+fit_33       <- ugarchfit(data = e1, spec = uspec.intra33) 
+
+coef_intra33 <- data.frame(fit_33@fit$robust.matcoef[,1])
+h1_coef <- coef_intra33[c("vxreg1"),]
+h2_coef <- coef_intra33[c("vxreg2"),]
+h3_coef <- coef_intra33[c("vxreg3"),]
+h4_coef <- coef_intra33[c("vxreg4"),]
+h5_coef <- coef_intra33[c("vxreg5"),]
+h6_coef <- coef_intra33[c("vxreg6"),]
+# h7_coef <- coef_intra[c("vxreg7"),]
+
+mu <- coef_intra33[c("mu"),]
+ar1 <- coef_intra33[c("ar1"),]
+mxv <- coef_intra33[c("mxreg1"),]
+mxd <- coef_intra33[c("mxreg2"),]
+omega <- coef_intra33[c("omega"),]
+alpha1 <- coef_intra33[c("alpha1"),]
+beta1 <- coef_intra33[c("beta1"),]
+gamma1 <- coef_intra33[c("gamma1"),]
+
+
+pv_33 <- data.frame(fit_33@fit$robust.matcoef[,4]) %>%
+  rename(event_33 = fit_33.fit.robust.matcoef...4.)
+Pv_33 <- cbind(pv = rownames(pv_33), pv_33)
+rownames(Pv_33) <- 1:nrow(Pv_33)
+
+coef_33 <- data.frame(mu,ar1,mxv,mxd,omega,alpha1, beta1,gamma1) %>%
+  pivot_longer(cols = c(1,2,3,4,5,6,7,8),
+               names_to = "coef", values_to="coef_33")
+
+hour_impact33 <- data.frame(h1_coef,h2_coef,h3_coef,h4_coef,h5_coef,h6_coef) %>%
+ mutate(h0 = 0) %>%
+  select(h0,h1=h1_coef, h2=h2_coef,h3=h3_coef,
+         h4=h4_coef,h5=h5_coef,h6=h6_coef)%>%
+  pivot_longer(cols=c(1,2,3,4,5,6,7),
+               names_to = "hour", values_to="percent_change_33") %>%
+  mutate(h = row_number()-1) %>% select(h, percent_change_33)
+
+```
+
+```{r 323, echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+# 3/23 QE ----
+uspec.intra323  = ugarchspec(mean.model = list(armaOrder = c(1,0),
+                                        external.regressors =
+                                          ext_reg_intra[,c(1,2)]),
+                      variance.model = list(model="eGARCH", 
+                                            garchOrder = c(1,1),
+                                            external.regressors =
+                                              ext_reg_intra[,c(15,16,17,18,19,20)]),
+                      distribution.model = "std")
+fit_323       <- ugarchfit(data = e1, spec = uspec.intra323) 
+
+coef_intra323 <- data.frame(fit_323@fit$robust.matcoef[,1])
+h1_coef <- coef_intra323[c("vxreg1"),]
+h2_coef <- coef_intra323[c("vxreg2"),]
+h3_coef <- coef_intra323[c("vxreg3"),]
+h4_coef <- coef_intra323[c("vxreg4"),]
+h5_coef <- coef_intra323[c("vxreg5"),]
+h6_coef <- coef_intra323[c("vxreg6"),]
+
+mu <- coef_intra323[c("mu"),]
+ar1 <- coef_intra323[c("ar1"),]
+mxv <- coef_intra323[c("mxreg1"),]
+mxd <- coef_intra323[c("mxreg2"),]
+omega <- coef_intra323[c("omega"),]
+alpha1 <- coef_intra323[c("alpha1"),]
+beta1 <- coef_intra323[c("beta1"),]
+gamma1 <- coef_intra323[c("gamma1"),]
+
+pv_323 <- data.frame(fit_323@fit$robust.matcoef[,4]) %>%
+  rename(event_323 = fit_323.fit.robust.matcoef...4.)
+Pv_323 <- cbind(pv = rownames(pv_323), pv_323)
+rownames(Pv_323) <- 1:nrow(Pv_323)
+
+coef_323 <- data.frame(mu,ar1,mxv,mxd,omega,alpha1, beta1,gamma1) %>%
+  pivot_longer(cols = c(1,2,3,4,5,6,7,8),
+               names_to = "coef", values_to="coef_323")
+
+
+hour_impact323 <- data.frame(h1_coef,h2_coef,h3_coef,h4_coef,h5_coef,h6_coef) %>%
+ mutate(h0 = 0) %>%
+  select(h0,h1=h1_coef, h2=h2_coef,h3=h3_coef,
+         h4=h4_coef,h5=h5_coef,h6=h6_coef)%>%
+  pivot_longer(cols=c(1,2,3,4,5,6,7),
+               names_to = "hour", values_to="percent_change_323") %>%
+  mutate(h = row_number()-1) %>% select(h, percent_change_323)
+```
+
+```{r 46, echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+# 4/6 LF ----
+uspec.intra46  = ugarchspec(mean.model = list(armaOrder = c(1,0),
+                                        external.regressors =
+                                          ext_reg_intra[,c(1,2)]),
+                      variance.model = list(model="eGARCH", 
+                                            garchOrder = c(1,1),
+                                            external.regressors =
+                                              ext_reg_intra[,c(21,22,23,24,25,26)]),
+                      distribution.model = "std")
+fit_46       <- ugarchfit(data = e1, spec = uspec.intra46) 
+
+coef_intra46 <- data.frame(fit_46@fit$robust.matcoef[,1])
+h1_coef <- coef_intra46[c("vxreg1"),]
+h2_coef <- coef_intra46[c("vxreg2"),]
+h3_coef <- coef_intra46[c("vxreg3"),]
+h4_coef <- coef_intra46[c("vxreg4"),]
+h5_coef <- coef_intra46[c("vxreg5"),]
+h6_coef <- coef_intra46[c("vxreg6"),]
+
+mu <- coef_intra46[c("mu"),]
+ar1 <- coef_intra46[c("ar1"),]
+mxv <- coef_intra46[c("mxreg1"),]
+mxd <- coef_intra46[c("mxreg2"),]
+omega <- coef_intra46[c("omega"),]
+alpha1 <- coef_intra46[c("alpha1"),]
+beta1 <- coef_intra46[c("beta1"),]
+gamma1 <- coef_intra46[c("gamma1"),]
+
+pv_46 <- data.frame(fit_46@fit$robust.matcoef[,4]) %>%
+  rename(event_46 = fit_46.fit.robust.matcoef...4.)
+Pv_46 <- cbind(pv = rownames(pv_46), pv_46)
+rownames(Pv_46) <- 1:nrow(Pv_46)
+
+coef_46 <- data.frame(mu,ar1,mxv,mxd,omega,alpha1, beta1,gamma1) %>%
+  pivot_longer(cols = c(1,2,3,4,5,6,7,8),
+               names_to = "coef", values_to="coef_46")
+
+
+hour_impact46 <- data.frame(h1_coef,h2_coef,h3_coef,h4_coef,h5_coef,h6_coef) %>%
+ mutate(h0 = 0) %>%
+  select(h0,h1=h1_coef, h2=h2_coef,h3=h3_coef,
+         h4=h4_coef,h5=h5_coef,h6=h6_coef)%>%
+  pivot_longer(cols=c(1,2,3,4,5,6,7),
+               names_to = "hour", values_to="percent_change_46") %>%
+  mutate(h = row_number()-1)%>% select(h, percent_change_46)
+```
+
+```{r 427, echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+# 4/27 LF ----
+uspec.intra427  = ugarchspec(mean.model = list(armaOrder = c(1,0),
+                                        external.regressors =
+                                          ext_reg_intra[,c(1,2)]),
+                      variance.model = list(model="eGARCH", 
+                                            garchOrder = c(1,1),
+                                            external.regressors =
+                                              ext_reg_intra[,c(27,28,29,30,31,32)]),
+                      distribution.model = "std")
+fit_427       <- ugarchfit(data = e1, spec = uspec.intra427) 
+
+coef_intra427 <- data.frame(fit_427@fit$robust.matcoef[,1])
+h1_coef <- coef_intra427[c("vxreg1"),]
+h2_coef <- coef_intra427[c("vxreg2"),]
+h3_coef <- coef_intra427[c("vxreg3"),]
+h4_coef <- coef_intra427[c("vxreg4"),]
+h5_coef <- coef_intra427[c("vxreg5"),]
+h6_coef <- coef_intra427[c("vxreg6"),]
+
+mu <- coef_intra427[c("mu"),]
+ar1 <- coef_intra427[c("ar1"),]
+mxv <- coef_intra427[c("mxreg1"),]
+mxd <- coef_intra427[c("mxreg2"),]
+omega <- coef_intra427[c("omega"),]
+alpha1 <- coef_intra427[c("alpha1"),]
+beta1 <- coef_intra427[c("beta1"),]
+gamma1 <- coef_intra427[c("gamma1"),]
+
+pv_427 <- data.frame(fit_427@fit$robust.matcoef[,4]) %>%
+  rename(event_427 = fit_427.fit.robust.matcoef...4.)
+Pv_427 <- cbind(pv = rownames(pv_427), pv_427)
+rownames(Pv_427) <- 1:nrow(Pv_427)
+
+coef_427 <- data.frame(mu,ar1,mxv,mxd,omega,alpha1, beta1,gamma1) %>%
+  pivot_longer(cols = c(1,2,3,4,5,6,7,8),
+               names_to = "coef", values_to="coef_427")
+
+hour_impact427 <- data.frame(h1_coef,h2_coef,h3_coef,h4_coef,h5_coef,h6_coef) %>%
+ mutate(h0 = 0) %>%
+  select(h0,h1=h1_coef, h2=h2_coef,h3=h3_coef,
+         h4=h4_coef,h5=h5_coef,h6=h6_coef)%>%
+  pivot_longer(cols=c(1,2,3,4,5,6,7),
+               names_to = "hour", values_to="percent_change_427") %>%
+  mutate(h = row_number()-1)  %>% select(h, percent_change_427)
+```
+
+```{r 625, echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+# 6/25 Cap ----
+uspec.intra625  = ugarchspec(mean.model = list(armaOrder = c(1,0),
+                                        external.regressors =
+                                          ext_reg_intra[,c(1,2)]),
+                      variance.model = list(model="eGARCH", 
+                                            garchOrder = c(1,1),
+                                            external.regressors =
+                                              ext_reg_intra[,c(33,34,35,36,37,38)]),
+                      distribution.model = "std")
+fit_625       <- ugarchfit(data = e1, spec = uspec.intra625) 
+
+coef_intra625 <- data.frame(fit_625@fit$robust.matcoef[,1])
+h1_coef <- coef_intra625[c("vxreg1"),]
+h2_coef <- coef_intra625[c("vxreg2"),]
+h3_coef <- coef_intra625[c("vxreg3"),]
+h4_coef <- coef_intra625[c("vxreg4"),]
+h5_coef <- coef_intra625[c("vxreg5"),]
+h6_coef <- coef_intra625[c("vxreg6"),]
+
+mu <- coef_intra625[c("mu"),]
+ar1 <- coef_intra625[c("ar1"),]
+mxv <- coef_intra625[c("mxreg1"),]
+mxd <- coef_intra625[c("mxreg2"),]
+omega <- coef_intra625[c("omega"),]
+alpha1 <- coef_intra625[c("alpha1"),]
+beta1 <- coef_intra625[c("beta1"),]
+gamma1 <- coef_intra625[c("gamma1"),]
+
+pv_625 <- data.frame(fit_625@fit$robust.matcoef[,4]) %>%
+  rename(event_625 = fit_625.fit.robust.matcoef...4.)
+Pv_625 <- cbind(pv = rownames(pv_625), pv_625)
+rownames(Pv_625) <- 1:nrow(Pv_625)
+
+coef_625 <- data.frame(mu,ar1,mxv,mxd,omega,alpha1, beta1,gamma1) %>%
+  pivot_longer(cols = c(1,2,3,4,5,6,7,8),
+               names_to = "coef", values_to="coef_625")
+
+hour_impact625 <- data.frame(h1_coef,h2_coef,h3_coef,h4_coef,h5_coef,h6_coef) %>%
+ mutate(h0 = 0) %>%
+  select(h0,h1=h1_coef, h2=h2_coef,h3=h3_coef,
+         h4=h4_coef,h5=h5_coef,h6=h6_coef)%>%
+  pivot_longer(cols=c(1,2,3,4,5,6,7),
+               names_to = "hour", values_to="percent_change_625") %>%
+  mutate(h = row_number()-1) %>% select(h, percent_change_625)
+```
+
+```{r 728, echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+# 7/28 LF ----
+uspec.intra728  = ugarchspec(mean.model = list(armaOrder = c(1,0),
+                                        external.regressors =
+                                          ext_reg_intra[,c(1,2)]),
+                      variance.model = list(model="eGARCH", 
+                                            garchOrder = c(1,1),
+                                            external.regressors =
+                                              ext_reg_intra[,c(39,40,41,42,43,44)]),
+                      distribution.model = "std")
+fit_728       <- ugarchfit(data = e1, spec = uspec.intra728) 
+
+coef_intra728 <- data.frame(fit_728@fit$robust.matcoef[,1])
+h1_coef <- coef_intra728[c("vxreg1"),]
+h2_coef <- coef_intra728[c("vxreg2"),]
+h3_coef <- coef_intra728[c("vxreg3"),]
+h4_coef <- coef_intra728[c("vxreg4"),]
+h5_coef <- coef_intra728[c("vxreg5"),]
+h6_coef <- coef_intra728[c("vxreg6"),]
+
+mu <- coef_intra728[c("mu"),]
+ar1 <- coef_intra728[c("ar1"),]
+mxv <- coef_intra728[c("mxreg1"),]
+mxd <- coef_intra728[c("mxreg2"),]
+omega <- coef_intra728[c("omega"),]
+alpha1 <- coef_intra728[c("alpha1"),]
+beta1 <- coef_intra728[c("beta1"),]
+gamma1 <- coef_intra728[c("gamma1"),]
+
+pv_728 <- data.frame(fit_728@fit$robust.matcoef[,4]) %>%
+  rename(event_728 = fit_728.fit.robust.matcoef...4.)
+Pv_728 <- cbind(pv = rownames(pv_728), pv_728)
+rownames(Pv_728) <- 1:nrow(Pv_728)
+
+coef_728 <- data.frame(mu,ar1,mxv,mxd,omega,alpha1, beta1,gamma1) %>%
+  pivot_longer(cols = c(1,2,3,4,5,6,7,8),
+               names_to = "coef", values_to="coef_728")
+
+hour_impact728 <- data.frame(h1_coef,h2_coef,h3_coef,h4_coef,h5_coef,h6_coef) %>%
+ mutate(h0 = 0) %>%
+  select(h0,h1=h1_coef, h2=h2_coef,h3=h3_coef,
+         h4=h4_coef,h5=h5_coef,h6=h6_coef)%>%
+  pivot_longer(cols=c(1,2,3,4,5,6,7),
+               names_to = "hour", values_to="percent_change_728") %>%
+  mutate(h = row_number()-1)  %>% select(h, percent_change_728)
+
+hour_impact_all <- hour_impact %>%
+  full_join(hour_impact323, by = c("h")) %>% select(h, percent_change_323, 
+                                                    percent_change_315 = percent_change)%>%
+  full_join(hour_impact33, by = "h") %>%  full_join(hour_impact46, by = "h")%>%
+  full_join(hour_impact427, by = "h") %>% full_join(hour_impact625, by = "h") %>%
+  full_join(hour_impact728, by = "h") %>%  pivot_longer(cols = c("percent_change_315","percent_change_33","percent_change_323",
+                        "percent_change_46","percent_change_427", "percent_change_625",
+                        "percent_change_728"), names_to = "event", values_to ="percent_change") %>%
+  arrange(event)
+
+hour_impact_sum <- hour_impact%>%
+  full_join(hour_impact323, by = c("h")) %>% select(h, percent_change_323, 
+                                                    percent_change_315 = percent_change)%>%
+  full_join(hour_impact33, by = "h") %>%  full_join(hour_impact46, by = "h")%>%
+  full_join(hour_impact427, by = "h") %>% full_join(hour_impact625, by = "h") %>%
+  full_join(hour_impact728, by = "h") 
+```
+
+
+```{r plot}
+
+hour_impact_all <-hour_impact_all%>% 
+  filter(!str_detect(event, "625"))
+  
+lcols = c("black","darkred","steelblue","orange","purple","red")
+linetype = c(rep(c('solid', 'dashed', 'dotted'),2))
+llegend = c("March 15 - QE", "March 23 - QE", "March 3 - Rate Cut", "April 27 - Credit Facility",
+            "April 6 - Credit Facility", "July 28 - Credit Facility")
+tlegend = "Event"
+
+hour_all <- ggplot(data =hour_impact_all, aes(x=h, y=percent_change)) +
+  geom_line(aes(color = event, linetype = event)) +
+  scale_color_manual(values = lcols, labels = llegend, name = tlegend) +
+  scale_linetype_manual(name = tlegend, labels = llegend,values = linetype) +
+  theme_minimal() + theme(panel.grid.minor = element_blank(),
+                          panel.grid.major = element_line(color="#66CCFF", 
+                                                          size=0.1, linetype="dashed"),
+                          axis.line.x.bottom = element_line(),
+                          axis.line.y = element_line(),
+                          text = element_text(family="Palatino"),
+                          legend.position = "right",
+                          legend.title = element_text(size = 12),
+                          legend.text = element_text( size = 10),
+                          plot.title = element_text(face = "bold", hjust = 0.5)) +
+  labs(x="Hours from event", y="Volatility Change (%)", 
+       title="Hourly change in S&P volatility after major FOMC announcements") +
+  scale_x_continuous(breaks=c(0,1,2,3,4,5,6)) #+
+  # scale_y_continuous(labels = scales::percent)
+
+hour_all
+
+ggsave("final-fig/sixhour.png", hour_all, height = 5.2, width = 9.6, dpi = 600)
+```
+
+```{r plot some}
+lcols = c("black","darkred","darkcyan","orange")
+linetype = c(rep(c('solid', 'dashed'),2))
+llegend = c("March 15 - QE", "March 23 - QE",
+            "April 6 - Credit Facility", 
+            "July 28 - Credit Facility")
+tlegend = "Event"
+
+hour_impact_some <- hour_impact_all%>% 
+  filter(!str_detect(event, "33")) %>% filter(!str_detect(event, "427")) # %>% filter(!str_detect(event, "625"))
+
+hour_some <- ggplot(data =hour_impact_some, aes(x=h, y=percent_change)) +
+  geom_line(aes(color = event, linetype = event)) +
+  scale_color_manual(values = lcols, labels = llegend, name = tlegend) +
+  scale_linetype_manual(name = tlegend, labels = llegend,values = linetype) +
+  theme_minimal() + theme(panel.grid.minor = element_blank(),
+                          panel.grid.major = element_line(color="#66CCFF", 
+                                                          size=0.1, linetype="dashed"),
+                          axis.line.x.bottom = element_line(),
+                          axis.line.y = element_line(),
+                          text = element_text(family="Palatino"),
+                          legend.position = "bottom",
+                          legend.title = element_text(size = 12),
+                          legend.text = element_text( size = 10),
+                          plot.title = element_text(face = "bold", hjust = 0.5)) +
+  labs(x="Hours from event", y="Volatility Change (%)", 
+       title="Hourly change in S&P volatility after major FOMC announcements",
+       caption = "Note: Events on March 3, April 27, and June 25 could be found in the Appendix") +
+  scale_x_continuous(breaks=c(0,1,2,3,4,5,6)) 
+  # scale_y_continuous(labels = scales::percent) 
+
+hour_some
+
+ggsave("final-fig/some-sixhour.png", hour_some, height = 5.2, width = 9.6, dpi = 600)
+```
+
